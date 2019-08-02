@@ -7,9 +7,7 @@ and change behaviour via `callbacks`.
 Example would be, how to implement persistence. Rule engine works in memory, but you can plug different
 behaviours, which can implement callback `after_execute` and persist changes. With this approach you
 can have different behaviours, like: `SaveAfterExec`, `SaveBySideEffect` and different storages
-(DGraph, Postgresql). `after_execute` - callback allows to write audit log(in any place of your choise),
-which is very important to understand, which rules applied, which not (some solutions doesn't
-provide this feature).
+(DGraph, Postgresql).
 
 Via callback in lifecycle `load_data` the data will be loaded and should be updated, if there any
 change available in extern source (so it interact with a source of truth via loading data and

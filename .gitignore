@@ -1,0 +1,9 @@
+src/calypte_lexer.erl
+src/calypte_parser.erl
+
+/_build
+/deps
+/doc
+
+erl_crash.dump
+.DS_Store

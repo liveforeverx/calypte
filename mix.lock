@@ -1,7 +1,6 @@
 %{
   "benchee": {:hex, :benchee, "1.0.1", "66b211f9bfd84bd97e6d1beaddf8fc2312aaabe192f776e8931cb0c16f53a521", [:mix], [{:deep_merge, "~> 1.0", [hex: :deep_merge, repo: "hexpm", optional: false]}], "hexpm"},
-  "decimal": {:hex, :decimal, "1.7.0", "30d6b52c88541f9a66637359ddf85016df9eb266170d53105f02e4a67e00c5aa", [:mix], [], "hexpm"},
+  "decimal": {:hex, :decimal, "1.8.0", "ca462e0d885f09a1c5a342dbd7c1dcf27ea63548c65a65e67334f4b61803822e", [:mix], [], "hexpm"},
   "deep_merge": {:hex, :deep_merge, "1.0.0", "b4aa1a0d1acac393bdf38b2291af38cb1d4a52806cf7a4906f718e1feb5ee961", [:mix], [], "hexpm"},
-  "exrun": {:hex, :exrun, "0.1.7", "1beae0caf68dfd07dea15602edf2c9af6ffd89b25a26edf43a57b325c94ee8b0", [:mix], [], "hexpm"},
-  "libgraph": {:git, "https://github.com/bitwalker/libgraph.git", "493d91d214418bbd9607881bb1db270352b27a26", []},
+  "exrun": {:hex, :exrun, "0.1.8", "61b0caae54783d9494c0125e197eee00ba30afab991cd97408fe012efe06ae4e", [:mix], [], "hexpm"},
 }

@@ -21,7 +21,6 @@ defmodule Calypte.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:libgraph, github: "bitwalker/libgraph"},
       {:decimal, "~> 1.7"},
       {:exrun, "~> 0.1", only: [:test, :dev]},
       {:benchee, "~> 1.0", only: [:test, :dev]},

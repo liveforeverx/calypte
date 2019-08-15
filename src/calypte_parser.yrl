@@ -2,7 +2,7 @@ Nonterminals root meta_pairs meta_pair expression expressions left_match
              type_def basic_expr assignment assertion list function arg_list var attribute math
              uminus_math data data_basic data_arg data_list value_number number boolean.
 Terminals '@' '[' ']' '(' ')' '$' '\'' '=' '-' '+' '*' '/' '%' 'true' 'false' ',' isa is func_begin op and
-          or not in label datetime integer float string.
+          or not in default label datetime integer float string.
 Rootsymbol root.
 
 Left      30 ','.
@@ -34,6 +34,7 @@ expression -> var label type_def                       : relation('$1', '$2', '$
 expression -> type_def                                 : '$1'.
 expression -> assignment                               : '$1'.
 expression -> assertion                                : '$1'.
+expression -> attribute 'default' basic_expr           : expr('$2', '$1', '$3').
 expression -> left_match                               : '$1'.
 
 type_def -> var 'isa' label                            : type_def('$1', '$3').

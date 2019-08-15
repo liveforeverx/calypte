@@ -59,7 +59,7 @@ defmodule Calypte.Graph do
     }
   end
 
-  defp apply_change(%Change{action: :delete, type: :node, id: id, values: attributes}, graph) do
+  defp apply_change(%Change{action: :del, type: :node, id: id, values: attributes}, graph) do
     %__MODULE__{type_key: type_key, nodes: nodes, typed: types} = graph
 
     case attributes do
@@ -69,8 +69,7 @@ defmodule Calypte.Graph do
         %__MODULE__{graph | nodes: updated_nodes, typed: typed}
 
       _ ->
-        # TODO:
-        graph
+        del_attributes(id, attributes, graph)
     end
   end
 
@@ -96,5 +95,24 @@ defmodule Calypte.Graph do
   defp del_type(typed, id) do
     typed = Map.delete(typed, id)
     if map_size(typed) == 0, do: :pop, else: {nil, typed}
+  end
+
+  defp del_attributes(id, attributes, %__MODULE__{nodes: nodes} = graph) do
+    node = Map.get(nodes, id, %{})
+    new_node = Enum.reduce(attributes, node, &del_attribute/2)
+    %__MODULE__{graph | nodes: Map.put(nodes, id, new_node)}
+  end
+
+  defp del_attribute({attr, values}, node) do
+    case node[attr] do
+      nil ->
+        node
+
+      existing_values ->
+        case existing_values -- values do
+          [] -> Map.delete(node, attr)
+          new_values -> Map.put(node, attr, new_values)
+        end
+    end
   end
 end

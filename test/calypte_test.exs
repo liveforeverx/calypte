@@ -1,5 +1,8 @@
 defmodule CalypteTest do
   use ExUnit.Case
+
+  alias Calypte.Graph
+
   doctest Calypte
 
   @data %{
@@ -9,7 +12,7 @@ defmodule CalypteTest do
     "surname" => "Smith",
     "age" => 42,
     "has_child" => [
-      %{"uid" => "2", "type" => "Person", "name" => "Mike", "age" => 15},
+      %{"uid" => "2", "type" => "Person", "name" => "Mike", "age" => 10},
       %{"uid" => "3", "type" => "Person", "name" => "Cindy", "age" => 16}
     ]
   }
@@ -27,8 +30,8 @@ defmodule CalypteTest do
   #   $discount's type = "family"
   # """
 
-  @rule """
-  @id "test_rule"
+  @basic_rule """
+  @id "basic_rule"
 
   @if
     $child isa Person
@@ -39,12 +42,49 @@ defmodule CalypteTest do
   """
 
   test "full test" do
-    ctx = Calypte.init(@data)
-    {:ok, rule} = Calypte.string(@rule)
-    ctx = Calypte.add_rules(ctx, [rule])
+    ctx = TestHelper.init_ctx(@data, @basic_rule)
 
-    %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
-    %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
-    %{executed?: false} = Calypte.eval(ctx)
+    assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: false} = Calypte.eval(ctx)
+  end
+
+  @basic_math """
+  @id "basic_math"
+
+  @if
+    $child isa Person
+      age < 12
+      discount default 0
+
+  @then
+    $child's discount = $child's discount + 10
+  """
+
+  test "math test" do
+    ctx = TestHelper.init_ctx(@data, @basic_math)
+
+    assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: false} = Calypte.eval(ctx)
+  end
+
+  @chain_rule """
+  @id "chain_rule"
+
+  @if
+    $child isa Person
+      discount > 0
+
+  @then
+    $child's discount = $child's discount + 2
+  """
+
+  test "truth maintainance with chained rules" do
+    ctx = TestHelper.init_ctx(@data, [@basic_math, @chain_rule])
+
+    assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
+    %{graph: graph} = Calypte.add_change(ctx, %{"uid" => "2", "age" => 12})
+    assert Graph.get_node(graph, "2")["discount"] == nil
   end
 end

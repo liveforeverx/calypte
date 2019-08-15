@@ -7,15 +7,34 @@ defmodule Calypte.Binding do
 
   import Utils
 
-  defstruct rule: nil, id_key: nil, matches: %{}, nodes: %{}
+  @type hash :: integer()
 
-  def hash(%__MODULE__{rule: rule, matches: matches} = binding) do
-    bindings_with_ids =
-      for {var, bindings} <- matches, into: %{}, do: {{var, node_id!(binding, var)}, bindings}
+  defstruct rule: nil, id_key: nil, hash: nil, matches: %{}, updated_matches: %{}, nodes: %{}
 
-    :erlang.phash2({Rule.id(rule), bindings_with_ids})
+  def calc_hash(%__MODULE__{rule: rule} = binding) do
+    hashable_matches = materialized_matches(binding, &filter_attributes(rule, &1, &2))
+    %__MODULE__{binding | hash: :erlang.phash2({Rule.id(rule), hashable_matches})}
   end
 
-  def node_id!(%__MODULE__{id_key: id_key, nodes: nodes}, var),
-    do: nodes |> Map.fetch!(var) |> Map.fetch!(id_key) |> from_value()
+  def hash(%__MODULE__{hash: hash} = _binding) when hash != nil, do: hash
+
+  def materialized_matches(binding, filter \\ fn _var, attributes -> attributes end) do
+    %__MODULE__{id_key: id_key, matches: matches, nodes: nodes} = binding
+
+    for {var, attributes} <- matches, into: %{} do
+      {{var, node_id!(nodes, id_key, var)}, filter.(var, attributes)}
+    end
+  end
+
+  defp filter_attributes(rule, var, attributes) do
+    for {attr, values} <- attributes, not Rule.modified_var?(rule, var, attr), into: %{} do
+      {attr, values}
+    end
+  end
+
+  def node_id!(%__MODULE__{id_key: id_key, nodes: nodes}, var), do: node_id!(nodes, id_key, var)
+
+  defp node_id!(nodes, id_key, var) do
+    nodes |> Map.fetch!(var) |> Map.fetch!(id_key) |> from_value()
+  end
 end

@@ -15,7 +15,8 @@ defmodule Calypte.Utils do
   def from_value(%Value{value: value}), do: value
   def from_value(value), do: value
 
-  def to_value(values) when is_list(values), do: Enum.map(values, &to_value/1)
-  def to_value(%Value{} = value), do: value
-  def to_value(value), do: Value.new(value)
+  def to_value(values, virtual \\ false)
+  def to_value(values, virtual) when is_list(values), do: Enum.map(values, &to_value(&1, virtual))
+  def to_value(%Value{} = value, _), do: value
+  def to_value(value, virtual), do: Value.new(value, virtual)
 end

@@ -31,7 +31,8 @@ defmodule Calypte.Engine do
   @callback add_change(state, Changeset.t()) :: state
 
   @callback eval(state, Graph.t()) :: {[Binding.t()], state}
-  @callback add_exec_change(state, Changeset.t(), Binding.t()) :: state
+  @callback add_exec_change(state, Rule.exec_id(), Changeset.t()) :: state
+  @callback del_exec_change(state, Rule.exec_id(), Changeset.t()) :: state
 
   def init(module, graph), do: module.init(graph)
   def add_rules(module, state, rules), do: module.add_rules(state, rules)
@@ -39,6 +40,9 @@ defmodule Calypte.Engine do
 
   def add_change(module, state, changeset), do: module.add_change(state, changeset)
 
-  def add_exec_change(module, state, changeset, binding),
-    do: module.add_exec_change(state, changeset, binding)
+  def add_exec_change(module, state, exec_id, changeset),
+    do: module.add_exec_change(state, exec_id, changeset)
+
+  def del_exec_change(module, state, exec_id, changeset),
+    do: module.add_exec_change(state, exec_id, changeset)
 end

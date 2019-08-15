@@ -25,8 +25,18 @@ defmodule Calypte.Engine.NaiveFirst do
   end
 
   @impl true
-  def add_exec_change(%{executed: executed} = state, _, %Binding{rule: rule} = binding) do
-    %{state | executed: deep_put(executed, [Rule.id(rule), Binding.hash(binding)], true)}
+  def add_exec_change(%{executed: executed} = state, {rule_id, hash}, _) do
+    %{state | executed: deep_put(executed, [rule_id, hash], true)}
+  end
+
+  @impl true
+  def del_exec_change(%{executed: executed} = state, {rule_id, hash}, _) do
+    %{^hash => true} = rule_execs = executed[rule_id]
+
+    cond do
+      map_size(rule_execs) == 1 -> %{state | executed: Map.delete(executed, rule_id)}
+      true -> %{state | executed: executed |> pop_in([rule_id, hash]) |> elem(1)}
+    end
   end
 
   @impl true
@@ -41,6 +51,7 @@ defmodule Calypte.Engine.NaiveFirst do
   end
 
   defp find_binding([], _graph, %Binding{} = binding, state) do
+    binding = Binding.calc_hash(binding)
     if executed?(state, binding), do: [], else: [binding]
   end
 
@@ -72,7 +83,7 @@ defmodule Calypte.Engine.NaiveFirst do
          do: check_bindings(matches, graph, next_bindings, state)
   end
 
-  def executed?(%{executed: executed} = _state, %Binding{rule: rule} = binding) do
-    executed[Rule.id(rule)][Binding.hash(binding)]
+  def executed?(%{executed: executed} = _state, %Binding{rule: rule, hash: hash}) do
+    executed[Rule.id(rule)][hash]
   end
 end

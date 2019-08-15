@@ -67,7 +67,21 @@ defmodule Calypte.ParserTest do
               ]} = Calypte.parse(@rule_short)
     end
 
-    test "manipulations" do
+    @rule_test """
+    $father isa Person
+      discount default 0
+    """
+
+    test "default values" do
+      assert {:ok,
+              [
+                %Var{name: "father", type: "Person"},
+                %Expr{
+                  left: %Var{attr: "discount"},
+                  right: %Value{type: :integer, val: 0},
+                  type: :default
+                }
+              ]} = Calypte.parse(@rule_test)
     end
   end
 

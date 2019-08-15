@@ -4,10 +4,13 @@ defmodule Calypte.Context do
   """
   alias Calypte.Graph
 
-  defstruct graph: Graph.new(),
+  defstruct graph: %Graph{},
             engine: nil,
             state: nil,
             life_cycle: [],
+            exec_count: 0,
             exec_log: [],
-            executed?: false
+            exec_store: %{},
+            executed?: false,
+            var_tracks: %{}
 end

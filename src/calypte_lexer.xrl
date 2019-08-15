@@ -4,7 +4,7 @@ D          = [0-9]
 FUN_BEGIN  = [a-z_?.]+\(
 WHITESPACE = (\s|\t|\n|\r)
 COMMENTS   = #.*
-CODEWORDS  = (isa|is|and|or|not|in|true|false)
+CODEWORDS  = (isa|is|and|or|not|in|default|true|false)
 OP         = (<=|<|!=|==|>=|>|=~)
 MATH       = (\+|\*|/|%)
 Labels     = [A-Za-z_][0-9a-zA-Z_/.-]*

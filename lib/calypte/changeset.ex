@@ -58,11 +58,25 @@ defmodule Calypte.Changeset do
   defp is_edge(_), do: false
 
   defp diff_node(old_node, new_node) do
-    Enum.reduce(new_node, {[], []}, fn
-      {key, nil}, {add, delete} -> {add, [{key, old_node[key]} | delete]}
-      {key, value}, {add, delete} -> {[{key, value} | add], delete}
+    Enum.reduce(new_node, {[], []}, fn {key, values}, {add, delete} ->
+      old_values = old_node[key]
+      to_delete = diff_values(key, old_values, values)
+      to_add = diff_values(key, values, old_values)
+      {to_add ++ add, to_delete ++ delete}
     end)
   end
+
+  defp diff_values(_key, nil, _existing), do: []
+  defp diff_values(key, values, nil), do: key_diff(key, values)
+
+  defp diff_values(key, values, to_diff) do
+    to_diff = Enum.map(to_diff, &from_value(&1))
+    values = Enum.filter(values, fn value -> not (from_value(value) in to_diff) end)
+    key_diff(key, values)
+  end
+
+  defp key_diff(_key, []), do: []
+  defp key_diff(key, values), do: [{key, values}]
 
   defp add_change(_id, []), do: []
   defp add_change(id, changes), do: %Change{id: id, values: Map.new(changes)}
@@ -79,17 +93,17 @@ defmodule Calypte.Changeset do
   @doc """
   Build changeset from binding diff
   """
-  def from_binding_diff(%Binding{matches: matches}, %Binding{matches: new_matches} = new_binding) do
-    to_delete = find_new(matches, new_matches)
-    to_add = find_new(new_matches, matches)
+  def from_binding(%Binding{matches: old_matches, updated_matches: new_matches} = binding) do
+    to_delete = find_new(old_matches, new_matches)
+    to_add = find_new(new_matches, old_matches)
 
     to_delete_changes =
       for {var, attrs} <- to_delete,
-          do: %Change{action: :del, id: Binding.node_id!(new_binding, var), values: attrs}
+          do: %Change{action: :del, id: Binding.node_id!(binding, var), values: attrs}
 
     to_add_changes =
       for {var, attrs} <- to_add,
-          do: %Change{action: :add, id: Binding.node_id!(new_binding, var), values: attrs}
+          do: %Change{action: :add, id: Binding.node_id!(binding, var), values: attrs}
 
     %__MODULE__{changes: to_delete_changes ++ to_add_changes}
   end
@@ -97,13 +111,30 @@ defmodule Calypte.Changeset do
   defp find_new(matches1, matches2) do
     Enum.reduce(matches1, %{}, fn {var, values}, acc ->
       var_attrs2 = Map.get(matches2, var, %{})
+      Enum.reduce(values, acc, &find_new_in_attr(var, &1, var_attrs2, &2))
+    end)
+  end
 
-      Enum.reduce(values, acc, fn {attr, values}, acc ->
-        case var_attrs2[attr] do
+  defp find_new_in_attr(var, {attr, values}, var_attrs2, acc) do
+    case values |> List.wrap() |> Enum.filter(&(&1.virtual != true)) do
+      [] ->
+        acc
+
+      values ->
+        case List.wrap(var_attrs2[attr]) do
           ^values -> acc
           _ -> deep_put(acc, [var, attr], values)
         end
-      end)
-    end)
+    end
   end
+
+  @doc """
+  Revert changeset
+  """
+  def revert(%__MODULE__{changes: changes} = changeset) do
+    %{changeset | changes: Enum.reduce(changes, [], &[revert_change(&1) | &2])}
+  end
+
+  defp revert_change(%Change{action: :del} = change), do: %{change | action: :add}
+  defp revert_change(%Change{action: :add} = change), do: %{change | action: :del}
 end

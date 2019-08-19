@@ -11,6 +11,10 @@ defmodule Calypte.Binding do
 
   defstruct rule: nil, id_key: nil, hash: nil, matches: %{}, updated_matches: %{}, nodes: %{}
 
+  def put_match(%__MODULE__{matches: matches} = binding, name, attr, value) do
+    %{binding | matches: deep_put(matches, [name, attr], to_value(value, true))}
+  end
+
   def calc_hash(%__MODULE__{rule: rule} = binding) do
     hashable_matches = materialized_matches(binding, &filter_attributes(rule, &1, &2))
     %__MODULE__{binding | hash: :erlang.phash2({Rule.id(rule), hashable_matches})}

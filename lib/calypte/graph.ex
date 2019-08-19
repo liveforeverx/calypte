@@ -30,16 +30,34 @@ defmodule Calypte.Graph do
   end
 
   @doc """
-  Get typed ids
+  Get typed ids. If list ids provided, than it filtered to contain only this type
   """
   @spec get_typed(t(), String.t()) :: [String.t()]
   def get_typed(%__MODULE__{typed: typed} = _graph, type), do: Map.keys(typed[type] || %{})
+
+  @spec get_typed(t(), String.t(), [node_id]) :: [String.t()]
+  def get_typed(%__MODULE__{typed: typed} = _graph, type, ids) do
+    type_map = typed[type] || %{}
+    Enum.filter(ids, &Map.has_key?(type_map, &1))
+  end
+
+  @spec related(t(), String.t(), String.t()) :: [String.t()]
+  def related(%__MODULE__{out_edges: out_edges, id_key: id_key} = _graph, node, edge_type) do
+    id = Map.get(node, id_key, []) |> from_value() |> unwrap()
+    edges_map = out_edges[id][edge_type] || %{}
+    Map.keys(edges_map)
+  end
 
   @doc """
   Get node
   """
   @spec get_node(t(), node_id) :: node | nil
   def get_node(%__MODULE__{nodes: nodes}, id), do: Map.get(nodes, id)
+
+  @doc """
+  Implements Access protocol for read
+  """
+  def fetch(%__MODULE__{nodes: nodes}, id), do: Map.fetch(nodes, id)
 
   @doc """
   Update graph using changeset
@@ -79,12 +97,12 @@ defmodule Calypte.Graph do
   end
 
   defp add_types(typed, id, new_types) do
-    types_to_add = List.wrap(new_types)
+    types_to_add = wrap(new_types)
     Enum.reduce(types_to_add, typed, &deep_put(&2, [from_value(&1), id], true))
   end
 
   defp del_types(typed, id, removed_types) do
-    types_to_remove = List.wrap(removed_types)
+    types_to_remove = wrap(removed_types)
 
     Enum.reduce(types_to_remove, typed, fn type, typed ->
       {_, updated_typed} = Map.get_and_update(typed, from_value(type), &del_type(&1, id))
@@ -109,9 +127,9 @@ defmodule Calypte.Graph do
         node
 
       existing_values ->
-        case existing_values -- values do
+        case wrap(existing_values) -- wrap(values) do
           [] -> Map.delete(node, attr)
-          new_values -> Map.put(node, attr, new_values)
+          new_values -> Map.put(node, attr, unwrap(new_values))
         end
     end
   end

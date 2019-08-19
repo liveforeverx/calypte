@@ -12,5 +12,11 @@ defmodule Calypte.Context do
             exec_log: [],
             exec_store: %{},
             executed?: false,
+            last_binding: nil,
             var_tracks: %{}
+
+  @doc """
+  Accessor, which forwards access requests to underlying graph
+  """
+  def fetch(%__MODULE__{graph: graph}, id), do: Access.fetch(graph, id)
 end

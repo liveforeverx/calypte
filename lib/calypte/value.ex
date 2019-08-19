@@ -6,6 +6,8 @@ defmodule Calypte.Value do
 
   defstruct value: nil, id: nil, virtual: false
 
-  def new(value, virtual \\ false),
-    do: %__MODULE__{value: value, id: Utils.timestamp(), virtual: virtual}
+  def new(value, virtual \\ false) do
+    timestamp = if virtual, do: 0, else: Utils.timestamp()
+    %__MODULE__{value: value, id: timestamp, virtual: virtual}
+  end
 end

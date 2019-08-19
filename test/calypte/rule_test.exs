@@ -16,7 +16,7 @@ defmodule Calypte.RuleTest do
       nodes = %{"person" => %{"age" => [age], "name" => [Value.new("John")]}}
       binding = %Binding{nodes: nodes}
 
-      assert [%Binding{matches: %{"person" => %{"age" => ^age}}}] = Rule.eval(if_expr, binding)
+      assert [%Binding{matches: %{"person" => %{"age" => ^age}}}] = Rule.match(if_expr, binding)
     end
 
     @rule """
@@ -38,10 +38,10 @@ defmodule Calypte.RuleTest do
       uid = Value.new("test_uid")
 
       nodes = %{"person" => %{"uid" => [uid], "age" => [age], "discount" => [Value.new(0)]}}
-      assert [binding1] = Rule.eval(if_exprs, %Binding{rule: rule, id_key: "uid", nodes: nodes})
+      assert [binding1] = Rule.match(if_exprs, %Binding{rule: rule, id_key: "uid", nodes: nodes})
 
       nodes = %{"person" => %{"uid" => [uid], "age" => [age], "discount" => [Value.new(10)]}}
-      assert [binding2] = Rule.eval(if_exprs, %Binding{rule: rule, id_key: "uid", nodes: nodes})
+      assert [binding2] = Rule.match(if_exprs, %Binding{rule: rule, id_key: "uid", nodes: nodes})
 
       # modified variables doesn't modify hash of binding if changed.
       assert Binding.calc_hash(binding1).hash == Binding.calc_hash(binding2).hash

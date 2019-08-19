@@ -6,7 +6,7 @@ defmodule Calypte.Engine.NaiveFirst do
   """
 
   alias Calypte.{Binding, Graph, Rule, Utils}
-  alias Calypte.Ast.{Var}
+  alias Calypte.Ast.{Relation, Var}
   import Utils
 
   @behaviour Calypte.Engine
@@ -18,6 +18,11 @@ defmodule Calypte.Engine.NaiveFirst do
 
   @impl true
   def add_rules(%{rules: rules} = state, new_rules), do: %{state | rules: new_rules ++ rules}
+
+  @impl true
+  def delete_rules(%{rules: rules} = state, rule_ids) do
+    %{state | rules: Enum.filter(rules, &(not (Rule.id(&1) in rule_ids)))}
+  end
 
   @impl true
   def eval(%{rules: rules} = state, graph) do
@@ -61,8 +66,17 @@ defmodule Calypte.Engine.NaiveFirst do
     check_branches(name, candidates, matches, graph, binding, state)
   end
 
+  defp find_binding([%Relation{} = relation | matches], graph, %{nodes: nodes} = binding, state) do
+    %Relation{from: %Var{name: from_var}, to: %Var{name: to_var, type: type}, edge: edge} =
+      relation
+
+    edges = Graph.related(graph, nodes[from_var], edge)
+    candidates = Graph.get_typed(graph, type, edges)
+    check_branches(to_var, candidates, matches, graph, binding, state)
+  end
+
   defp find_binding([expr | matches], graph, binding, state) do
-    check_bindings(matches, graph, Rule.eval(expr, binding), state)
+    check_bindings(matches, graph, Rule.match(expr, binding), state)
   end
 
   def check_branches(_, [], _matches, _graph, _binding, _state), do: []

@@ -1,8 +1,6 @@
 defmodule CalypteTest do
   use ExUnit.Case
 
-  alias Calypte.Graph
-
   doctest Calypte
 
   @data %{
@@ -17,18 +15,28 @@ defmodule CalypteTest do
     ]
   }
 
-  # @rule """
-  # @id "test_rule"
+  @relation_rule """
+  @id "test_rule"
 
-  # @if
-  #   $parent isa Person
-  #   $child has-child $child isa Person
-  #     age < 18
+  @if
+    $parent isa Person
+      discount default 0
+    $parent has_child $child isa Person
+      age < 18
 
-  # @then
-  #   $parent has-discount $discount isa Discount
-  #   $discount's type = "family"
-  # """
+  @then
+    $parent's discount = $parent's discount + 10
+  """
+
+  test "relation example" do
+    ctx = TestHelper.init_ctx(@data, @relation_rule)
+
+    assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: false} = ctx = Calypte.eval(ctx)
+
+    assert %{value: 20} = ctx["1"]["discount"]
+  end
 
   @basic_rule """
   @id "basic_rule"
@@ -41,7 +49,7 @@ defmodule CalypteTest do
     $child's type = "child"
   """
 
-  test "full test" do
+  test "basic example" do
     ctx = TestHelper.init_ctx(@data, @basic_rule)
 
     assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
@@ -84,7 +92,17 @@ defmodule CalypteTest do
 
     assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
     assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
-    %{graph: graph} = Calypte.add_change(ctx, %{"uid" => "2", "age" => 12})
-    assert Graph.get_node(graph, "2")["discount"] == nil
+    ctx = Calypte.add_change(ctx, %{"uid" => "2", "age" => 12})
+    assert nil == ctx["2"]["discount"]
+  end
+
+  test "manual rule deletion" do
+    ctx = TestHelper.init_ctx(@data, [@basic_math, @chain_rule])
+
+    assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
+    assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)
+
+    ctx = Calypte.delete_rules(ctx, ["basic_math"], true)
+    assert nil == ctx["2"]["discount"]
   end
 end

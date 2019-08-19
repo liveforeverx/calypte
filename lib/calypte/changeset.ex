@@ -39,7 +39,7 @@ defmodule Calypte.Changeset do
   def build_changes(graph, id, json) do
     %Graph{id_key: id_key, nodes: nodes} = graph
     {edges, node} = Enum.split_with(json, fn {_, value} -> is_edge(value) end)
-    node = for {key, value} <- node, into: %{}, do: {key, [Value.new(value)]}
+    node = for {key, value} <- node, into: %{}, do: {key, Value.new(value)}
     old_node = Map.get(nodes, id, %{})
     {add_attrs, delete_attrs} = diff_node(old_node, node)
 
@@ -59,7 +59,8 @@ defmodule Calypte.Changeset do
 
   defp diff_node(old_node, new_node) do
     Enum.reduce(new_node, {[], []}, fn {key, values}, {add, delete} ->
-      old_values = old_node[key]
+      values = List.wrap(values)
+      old_values = List.wrap(old_node[key])
       to_delete = diff_values(key, old_values, values)
       to_add = diff_values(key, values, old_values)
       {to_add ++ add, to_delete ++ delete}
@@ -76,7 +77,7 @@ defmodule Calypte.Changeset do
   end
 
   defp key_diff(_key, []), do: []
-  defp key_diff(key, values), do: [{key, values}]
+  defp key_diff(key, values), do: [{key, unwrap(values)}]
 
   defp add_change(_id, []), do: []
   defp add_change(id, changes), do: %Change{id: id, values: Map.new(changes)}
@@ -116,14 +117,14 @@ defmodule Calypte.Changeset do
   end
 
   defp find_new_in_attr(var, {attr, values}, var_attrs2, acc) do
-    case values |> List.wrap() |> Enum.filter(&(&1.virtual != true)) do
+    case values |> wrap() |> Enum.filter(&(&1.virtual != true)) do
       [] ->
         acc
 
       values ->
-        case List.wrap(var_attrs2[attr]) do
+        case wrap(var_attrs2[attr]) do
           ^values -> acc
-          _ -> deep_put(acc, [var, attr], values)
+          _ -> deep_put(acc, [var, attr], unwrap(values))
         end
     end
   end

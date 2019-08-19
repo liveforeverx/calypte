@@ -4,7 +4,7 @@ defmodule Calypte.Truth do
   this data.
   """
 
-  alias Calypte.{Binding, Changeset, Changeset.Change, Context, Rule, Utils}
+  alias Calypte.{Binding, Changeset, Changeset.Change, Context, LogEntry, Rule, Utils}
 
   import Utils
 
@@ -37,8 +37,11 @@ defmodule Calypte.Truth do
   Add change to tracking system, which can trigger revert of rules, which depends on previous changes
   """
   def add_change(context, changeset) do
-    changeset
-    |> traverse_execs(:del, %{}, context)
+    changeset |> traverse_execs(:del, %{}, context) |> delete_execs(context)
+  end
+
+  defp delete_execs(execs, context) do
+    execs
     |> Enum.sort(fn {_, id1}, {_, id2} -> id1 >= id2 end)
     |> Enum.reduce(context, &del_exec/2)
   end
@@ -56,10 +59,15 @@ defmodule Calypte.Truth do
     if planned[{rule_id, hash}] do
       tree_traversal(execs, planned, context)
     else
-      %{id: id, changeset: changeset} = exec_store[rule_id][hash]
-      planned = Map.put(planned, {rule_id, hash}, id)
-      planned = traverse_execs(changeset, :add, planned, context)
-      tree_traversal(execs, planned, context)
+      %{id: id, changeset: changeset, in_state: in_state?} = exec_store[rule_id][hash]
+
+      if in_state? do
+        planned = Map.put(planned, {rule_id, hash}, id)
+        planned = traverse_execs(changeset, :add, planned, context)
+        tree_traversal(execs, planned, context)
+      else
+        tree_traversal(execs, planned, context)
+      end
     end
   end
 
@@ -94,4 +102,22 @@ defmodule Calypte.Truth do
   end
 
   defp del_exec({exec_id, _}, context), do: Calypte.del_exec(context, exec_id)
+
+  @doc """
+  Delete rule executions
+  """
+  def delete_rule_execs(context, rule_ids) do
+    context |> find_rule_execs(rule_ids) |> tree_traversal(%{}, context) |> delete_execs(context)
+  end
+
+  defp find_rule_execs(context, rule_ids) do
+    %Context{exec_log: exec_log, exec_store: exec_store} = context
+
+    for %LogEntry{tag: :exec, rule_id: rule_id, change: hash} <- exec_log,
+        rule_id in rule_ids,
+        %{in_state: in_state?} = exec_store[rule_id][hash],
+        in_state? do
+      {rule_id, hash}
+    end
+  end
 end

@@ -93,6 +93,12 @@ defmodule Calypte do
     %{context | state: Engine.add_rules(engine, state, rules)}
   end
 
+  def delete_rules(context, rule_ids, remove_execs? \\ false) do
+    %Context{engine: engine, state: state} = context
+    %{context | state: Engine.delete_rules(engine, state, rule_ids)}
+    if remove_execs?, do: Truth.delete_rule_execs(context, rule_ids), else: context
+  end
+
   @doc """
   Add changeset or graph to a context.
   """
@@ -130,27 +136,35 @@ defmodule Calypte do
         %Context{context | state: state, executed?: false}
 
       {[binding | _possible_executions], state} ->
-        exec_binding(binding, %Context{context | state: state, executed?: true})
+        exec_binding(%Context{context | state: state, executed?: true}, binding)
     end
   end
 
-  defp exec_binding(%Binding{rule: rule, hash: hash} = binding, context) do
+  @doc """
+  Execute binding
+  """
+  def exec_binding(context, %Binding{rule: rule, hash: hash} = binding) do
     rule_id = Rule.id(rule)
     %Context{exec_count: exec_count, exec_log: exec_log, exec_store: exec_store} = context
     {executed_binding, changeset} = Rule.exec(binding)
 
     log_entry = %LogEntry{id: exec_count, tag: :exec, rule_id: rule_id, change: hash}
+    store_entry = %{id: exec_count, in_state: true, changeset: changeset}
 
     context = %Context{
       context
       | exec_count: exec_count + 1,
         exec_log: [log_entry | exec_log],
-        exec_store: deep_put(exec_store, [rule_id, hash], %{id: exec_count, changeset: changeset})
+        exec_store: deep_put(exec_store, [rule_id, hash], store_entry),
+        last_binding: binding
     }
 
     add_change(context, changeset, executed_binding)
   end
 
+  @doc """
+  Delete execution
+  """
   def del_exec(context, {rule_id, hash}) do
     %Context{
       graph: graph,
@@ -161,16 +175,22 @@ defmodule Calypte do
       exec_store: exec_store
     } = context
 
-    %{changeset: changeset} = exec_store[rule_id][hash]
+    %{changeset: changeset} = store_entry = exec_store[rule_id][hash]
     changeset = Changeset.revert(changeset)
-    log_entry = %LogEntry{id: exec_count, tag: :exec, rule_id: rule_id, change: hash}
+    log_entry = %LogEntry{id: exec_count, tag: :revert, rule_id: rule_id, change: hash}
 
     %Context{
       context
       | graph: Graph.add_change(graph, changeset),
         state: Engine.del_exec_change(engine, state, {rule_id, hash}, changeset),
         exec_count: exec_count + 1,
-        exec_log: [log_entry | exec_log]
+        exec_log: [log_entry | exec_log],
+        exec_store: deep_put(exec_store, [rule_id, hash], %{store_entry | in_state: false})
     }
   end
+
+  defdelegate put_match(binding, name, attr, value), to: Binding
+  defdelegate calc_hash(binding), to: Binding
+
+  defdelegate to_map(data), to: Utils
 end

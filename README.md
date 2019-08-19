@@ -1,4 +1,6 @@
-# Calypte
+# Calypte [![Build Status](https://travis-ci.org/liveforeverx/calypte.svg?branch=master)](https://travis-ci.org/liveforeverx/calypte)
+
+Unstable, under development.
 
 Small embeddable, flexible rule-based engine framework. To be really embeddable, it uses pluggable
 architecture and concept of rule `lifecycle`. Users of rule engine will need to configure and plug

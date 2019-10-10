@@ -3,13 +3,24 @@ defmodule Calypte.Binding do
 
   """
 
-  alias Calypte.{Rule, Utils}
+  alias Calypte.{Graph, Rule, Utils}
 
   import Utils
 
   @type hash :: integer()
 
-  defstruct rule: nil, id_key: nil, hash: nil, matches: %{}, updated_matches: %{}, nodes: %{}
+  defstruct rule: nil,
+            id_key: nil,
+            type_key: nil,
+            hash: nil,
+            matches: %{},
+            updated_matches: %{},
+            nodes: %{},
+            types: %{}
+
+  def init(%Graph{id_key: id_key, type_key: type_key} = graph, rule) do
+    %__MODULE__{rule: rule, id_key: id_key, type_key: type_key}
+  end
 
   def put_match(%__MODULE__{matches: matches} = binding, name, attr, value) do
     %{binding | matches: deep_put(matches, [name, attr], to_value(value, true))}
@@ -34,6 +45,11 @@ defmodule Calypte.Binding do
     for {attr, values} <- attributes, not Rule.modified_var?(rule, var, attr), into: %{} do
       {attr, values}
     end
+  end
+
+  def var_info(%__MODULE__{id_key: id_key, type_key: type_key, nodes: nodes}, var) do
+    %{^id_key => id, ^type_key => types} = Map.fetch!(nodes, var)
+    {from_value(id), types}
   end
 
   def node_id!(%__MODULE__{id_key: id_key, nodes: nodes}, var), do: node_id!(nodes, id_key, var)

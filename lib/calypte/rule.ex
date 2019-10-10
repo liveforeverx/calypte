@@ -10,7 +10,7 @@ defmodule Calypte.Rule do
   @type id :: term()
   @type exec_id :: {id(), Binding.hash()}
 
-  defstruct id: nil, if: nil, then: nil, meta: %{}, modified_vars: %{}
+  defstruct id: nil, if: nil, vars: %{}, then: nil, meta: %{}, modified_vars: %{}
 
   @math_operations [:+, :-, :*, :/]
   @comparisons [:>, :>=, :<, :<=, :==]
@@ -52,8 +52,10 @@ defmodule Calypte.Rule do
   defp do_match(%Expr{type: :=, left: %Var{name: name, attr: attr}} = expr, matches, nodes) do
     %Expr{right: right} = expr
 
-    for right_value <- do_match(right, matches, nodes),
-        do: {{name, attr}, to_value(right_value)}
+    for right_value <- do_match(right, matches, nodes) do
+      value = with {{_, _}, value} <- right_value, do: value
+      {{name, attr}, to_value(value)}
+    end
   end
 
   defp do_match(%Expr{type: :default, left: left, right: right}, matches, nodes) do

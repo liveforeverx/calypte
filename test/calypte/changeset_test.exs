@@ -5,12 +5,12 @@ defmodule Calypte.ChangesetTest do
 
   test "full example" do
     person = %{
-      "type" => [Value.new("Person")],
-      "name" => [Value.new("John")],
-      "surname" => [Value.new("Smith")]
+      "type" => Value.new("Person"),
+      "name" => Value.new("John"),
+      "surname" => Value.new("Smith")
     }
 
-    changes = [%Change{id: "1", values: person}]
+    changes = [%Change{id: "1", add: person}]
 
     assert %Graph{nodes: %{"1" => ^person}, typed: %{"Person" => %{"1" => true}}} =
              apply_changes(Graph.new(), changes)

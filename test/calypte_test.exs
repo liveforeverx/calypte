@@ -25,7 +25,7 @@ defmodule CalypteTest do
       age < 18
 
   @then
-    $parent's discount = $parent's discount + 10
+    $parent.discount = $parent.discount + 10
   """
 
   test "relation example" do
@@ -46,7 +46,7 @@ defmodule CalypteTest do
       age < 18
 
   @then
-    $child's type = "child"
+    $child.check_type = "child"
   """
 
   test "basic example" do
@@ -66,7 +66,7 @@ defmodule CalypteTest do
       discount default 0
 
   @then
-    $child's discount = $child's discount + 10
+    $child.discount = $child.discount + 10
   """
 
   test "math test" do
@@ -84,11 +84,11 @@ defmodule CalypteTest do
       discount > 0
 
   @then
-    $child's discount = $child's discount + 2
+    $child.discount = $child.discount + 2
   """
 
   test "truth maintainance with chained rules" do
-    ctx = TestHelper.init_ctx(@data, [@basic_math, @chain_rule])
+    ctx = TestHelper.init_ctx(@data, [@chain_rule, @basic_math])
 
     assert %{executed?: true, exec_log: [_]} = ctx = Calypte.eval(ctx)
     assert %{executed?: true, exec_log: [_, _]} = ctx = Calypte.eval(ctx)

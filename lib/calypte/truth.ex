@@ -37,7 +37,7 @@ defmodule Calypte.Truth do
   Add change to tracking system, which can trigger revert of rules, which depends on previous changes
   """
   def add_change(context, changeset) do
-    changeset |> traverse_execs(:del, %{}, context) |> delete_execs(context)
+    changeset |> traverse_execs(:delete, %{}, context) |> delete_execs(context)
   end
 
   defp delete_execs(execs, context) do
@@ -71,8 +71,8 @@ defmodule Calypte.Truth do
     end
   end
 
-  defp gather([%Change{action: action, type: :node} = change | changes], action, gathered) do
-    %Change{id: id, values: values} = change
+  defp gather([%Change{type: :node, id: id} = change | changes], action, gathered) do
+    %{^action => values} = change
 
     node_gathered =
       Enum.reduce(values, gathered[id] || %{}, fn {attr, values}, node_gathered ->

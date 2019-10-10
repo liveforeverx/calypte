@@ -45,7 +45,7 @@ defmodule Calypte.ParserTest do
 
     @rule_full """
     $father isa Person
-    $father's age > 18
+    $father.age > 18
     """
 
     @rule_short """
@@ -114,7 +114,7 @@ defmodule Calypte.ParserTest do
         age > 18
 
     @then
-      $father's discount = discount + 1
+      $father.discount = discount + 1
 
     """
 

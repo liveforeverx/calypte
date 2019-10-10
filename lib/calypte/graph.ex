@@ -6,18 +6,20 @@ defmodule Calypte.Graph do
   alias Calypte.{Changeset, Changeset.Change, Utils}
   import Utils
 
-  defstruct id_key: "uid", type_key: "type", out_edges: %{}, nodes: %{}, typed: %{}
-
   @type node_id :: term
-  @type edge_id :: term
+  @type edge_type :: term
+  @type edge_id :: {node_id, edge_type, node_id}
   @type node_type :: String.t()
   @type t :: %__MODULE__{
           id_key: String.t(),
           type_key: String.t(),
-          out_edges: %{node_id => %{edge_id => %{node_id => true}}},
+          out_edges: %{node_id => %{edge_type => %{node_id => true}}},
           nodes: %{node_id => term},
+          edges: %{edge_id => term},
           typed: %{node_type => %{node_id => true}}
         }
+
+  defstruct id_key: "uid", type_key: "type", out_edges: %{}, nodes: %{}, edges: %{}, typed: %{}
 
   @doc """
   Create new graph
@@ -54,6 +56,9 @@ defmodule Calypte.Graph do
   @spec get_node(t(), node_id) :: node | nil
   def get_node(%__MODULE__{nodes: nodes}, id), do: Map.get(nodes, id)
 
+  @spec get_node_type(t(), node_id) :: node_type | nil
+  def get_node_type(%__MODULE__{nodes: nodes}, id), do: nodes |> Map.get(id) |> from_value()
+
   @doc """
   Implements Access protocol for read
   """
@@ -66,34 +71,55 @@ defmodule Calypte.Graph do
     Enum.reduce(changes, graph, &apply_change/2)
   end
 
-  defp apply_change(%Change{action: :add, type: :node, id: id, values: attributes}, graph) do
+  defp apply_change(%Change{type: :node, id: id, delete: delete, add: add}, graph) do
     %__MODULE__{type_key: type_key, nodes: nodes, typed: typed} = graph
-    new_node = nodes |> Map.get(id, %{}) |> Map.merge(attributes)
-
-    %__MODULE__{
-      graph
-      | nodes: Map.put(nodes, id, new_node),
-        typed: add_types(typed, id, attributes[type_key])
-    }
+    nodes = update_attributes(nodes, id, delete, add)
+    delete_types = Map.get(delete, type_key)
+    add_types = Map.get(add, type_key)
+    typed = update_types(typed, id, delete_types, add_types)
+    %__MODULE__{graph | nodes: nodes, typed: typed}
   end
 
-  defp apply_change(%Change{action: :del, type: :node, id: id, values: attributes}, graph) do
-    %__MODULE__{type_key: type_key, nodes: nodes, typed: types} = graph
+  defp apply_change(%Change{type: :edge, id: edge_id, delete: delete, add: add}, graph) do
+    %__MODULE__{edges: edges, out_edges: out_edges} = graph
+    edges = update_attributes(edges, edge_id, delete, add)
+    {from_id, edge, to_id} = edge_id
+    out_edges = deep_put(out_edges, [from_id, edge, to_id], true)
+    %__MODULE__{graph | out_edges: out_edges, edges: edges}
+  end
 
-    case attributes do
-      nil ->
-        {node_to_delete, updated_nodes} = Map.pop(nodes, id)
-        typed = del_types(types, id, node_to_delete[type_key])
-        %__MODULE__{graph | nodes: updated_nodes, typed: typed}
+  defp update_attributes(container, id, delete, add) do
+    entity = Map.get(container, id, %{})
 
-      _ ->
-        del_attributes(id, attributes, graph)
+    case do_update_attributes(entity, delete, add) do
+      new_entity when map_size(new_entity) == 0 -> Map.delete(container, id)
+      new_entity -> Map.put(container, id, new_entity)
     end
   end
 
-  defp apply_change(%Change{action: :add, type: :edge, id: edge_spec, values: timestamp}, graph) do
-    %__MODULE__{out_edges: out_edges} = graph
-    %__MODULE__{graph | out_edges: deep_put(out_edges, edge_spec, timestamp)}
+  defp do_update_attributes(entity, delete, add) do
+    {entity, delete} =
+      Enum.reduce(add, {entity, delete}, fn {attr, add_values}, {entity, delete} ->
+        {delete_values, delete} = Map.pop(delete, attr)
+        {update_attr(entity, attr, delete_values, add_values), delete}
+      end)
+
+    Enum.reduce(delete, entity, fn {attr, values}, entity ->
+      update_attr(entity, attr, values, nil)
+    end)
+  end
+
+  defp update_attr(entity, attr, delete_values, add_values) do
+    existing_values = Map.get(entity, attr)
+
+    case (wrap(existing_values) -- wrap(delete_values)) ++ wrap(add_values) do
+      [] -> Map.delete(entity, attr)
+      new_values -> Map.put(entity, attr, unwrap(new_values))
+    end
+  end
+
+  defp update_types(typed, id, delete_types, new_types) do
+    typed |> del_types(id, delete_types) |> add_types(id, new_types)
   end
 
   defp add_types(typed, id, new_types) do
@@ -101,10 +127,10 @@ defmodule Calypte.Graph do
     Enum.reduce(types_to_add, typed, &deep_put(&2, [from_value(&1), id], true))
   end
 
-  defp del_types(typed, id, removed_types) do
-    types_to_remove = wrap(removed_types)
+  defp del_types(typed, id, deleted_types) do
+    deleted_types = wrap(deleted_types)
 
-    Enum.reduce(types_to_remove, typed, fn type, typed ->
+    Enum.reduce(deleted_types, typed, fn type, typed ->
       {_, updated_typed} = Map.get_and_update(typed, from_value(type), &del_type(&1, id))
       updated_typed
     end)
@@ -115,22 +141,27 @@ defmodule Calypte.Graph do
     if map_size(typed) == 0, do: :pop, else: {nil, typed}
   end
 
-  defp del_attributes(id, attributes, %__MODULE__{nodes: nodes} = graph) do
-    node = Map.get(nodes, id, %{})
-    new_node = Enum.reduce(attributes, node, &del_attribute/2)
-    %__MODULE__{graph | nodes: Map.put(nodes, id, new_node)}
+  def to_map(graph, root) do
+    {map, _} = to_map(graph, root, [])
+    map
   end
 
-  defp del_attribute({attr, values}, node) do
-    case node[attr] do
-      nil ->
-        node
+  defp to_map(graph, node_ids, visited) when is_list(node_ids) do
+    Enum.map_reduce(node_ids, visited, &to_map(graph, &1, &2))
+  end
 
-      existing_values ->
-        case wrap(existing_values) -- wrap(values) do
-          [] -> Map.delete(node, attr)
-          new_values -> Map.put(node, attr, unwrap(new_values))
-        end
+  defp to_map(%{out_edges: out_edges} = graph, node_id, visited) do
+    with %{} = node <- get_node(graph, node_id) do
+      out_edges = out_edges[node_id] || %{}
+
+      {edges, visited} =
+        Enum.map_reduce(out_edges, visited, fn {edge_id, nodes}, visited ->
+          child_ids = Map.keys(nodes)
+          {childs, visited} = to_map(graph, child_ids, visited)
+          {{edge_id, childs}, visited}
+        end)
+
+      {Enum.into(edges, node), visited}
     end
   end
 end

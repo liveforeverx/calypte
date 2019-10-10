@@ -8,7 +8,7 @@ defmodule Calypte.Utils do
   def deep_put(map, [key | keys], value),
     do: update_in(map, [key], &deep_put(&1 || %{}, keys, value))
 
-  def timestamp(), do: :os.system_time()
+  def timestamp(), do: :erlang.monotonic_time()
 
   def from_value([value]), do: from_value(value)
   def from_value(values) when is_list(values), do: Enum.map(values, &from_value/1)
@@ -17,14 +17,15 @@ defmodule Calypte.Utils do
 
   def to_value(values, virtual \\ false)
   def to_value(values, virtual) when is_list(values), do: Enum.map(values, &to_value(&1, virtual))
-  def to_value(%Value{} = value, _), do: value
+  def to_value(%Value{virtual: virtual?} = value, virtual?), do: value
+  def to_value(%Value{} = value, virtual?), do: %{value | virtual: virtual?}
   def to_value(value, virtual), do: Value.new(value, virtual)
 
   def wrap(list), do: List.wrap(list)
 
   def unwrap([]), do: nil
   def unwrap([value]), do: value
-  def unwrap(value) when not is_list(value), do: value
+  def unwrap(value), do: value
 
   def to_map(%Value{} = value), do: from_value(value)
 

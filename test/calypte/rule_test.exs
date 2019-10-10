@@ -26,7 +26,7 @@ defmodule Calypte.RuleTest do
         discount
 
     @then
-      $person's discount = $person's discount + 10
+      $person.discount = $person.discount + 10
     """
 
     test "modified variables" do

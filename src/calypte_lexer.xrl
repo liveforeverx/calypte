@@ -1,13 +1,13 @@
 Definitions.
 
 D          = [0-9]
-FUN_BEGIN  = [a-z_?.]+\(
+FUN_BEGIN  = [a-z_?]+\(
 WHITESPACE = (\s|\t|\n|\r)
 COMMENTS   = #.*
 CODEWORDS  = (isa|is|and|or|not|in|default|true|false)
 OP         = (<=|<|!=|==|>=|>|=~)
 MATH       = (\+|\*|/|%)
-Labels     = [A-Za-z_][0-9a-zA-Z_/.-]*
+Labels     = [A-Za-z_][0-9a-zA-Z_/-]*
 
 Rules.
 
@@ -19,7 +19,7 @@ Rules.
 @                     : {token, {'@', TokenLine}}.
 =                     : {token, {'=', TokenLine}}.
 -                     : {token, {'-', TokenLine}}.
-'|'s                  : {token, {'\'', TokenLine}}.
+\.                    : {token, {'.', TokenLine}}.
 \?                    : {token, {'?', TokenLine}}.
 {MATH}                : {token, {list_to_atom(TokenChars), TokenLine}}.
 {FUNC_BEGIN}          : {token, {func_begin, TokenLine, list_to_binary(TokenChars)}}.

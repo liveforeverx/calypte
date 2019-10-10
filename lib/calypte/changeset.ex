@@ -12,13 +12,16 @@ defmodule Calypte.Changeset do
 
   defmodule Change do
     @type t :: %__MODULE__{
-            action: :add | :del,
             type: :edge | :node,
             id: any,
-            values: any
+            delete: nil,
+            add: nil,
+            meta: any
           }
-    defstruct action: :add, type: :node, id: nil, values: nil
+    defstruct type: :node, id: nil, delete: %{}, add: %{}, meta: nil
   end
+
+  @creation_key :created
 
   @doc """
   Build changeset from a json
@@ -37,40 +40,63 @@ defmodule Calypte.Changeset do
   end
 
   def build_changes(graph, id, json) do
-    %Graph{id_key: id_key, nodes: nodes} = graph
+    %Graph{id_key: id_key, type_key: type_key, nodes: nodes} = graph
     {edges, node} = Enum.split_with(json, fn {_, value} -> is_edge(value) end)
-    node = for {key, value} <- node, into: %{}, do: {key, Value.new(value)}
-    old_node = Map.get(nodes, id, %{})
-    {add_attrs, delete_attrs} = diff_node(old_node, node)
+
+    node = valuefy_node(node)
+    {old_node, node} = fetch_or_create(nodes, id, node)
+    {delete_attrs, add_attrs} = partial_diff_attrs(old_node, node)
 
     nested_jsons = for {_, json} <- edges, do: json
+    type = from_value(old_node[type_key] || node[type_key])
 
     [
-      del_change(id, delete_attrs),
-      add_change(id, add_attrs),
+      %Change{id: id, delete: delete_attrs, add: add_attrs, meta: List.wrap(type)},
       do_build(graph, nested_jsons),
-      edge_changes(id, id_key, edges)
+      edge_changes(id, edges, id_key, graph)
     ]
+  end
+
+  defp fetch_or_create(container, id, new_entity) do
+    case Map.get(container, id) do
+      nil -> {%{}, Map.put(new_entity, @creation_key, Utils.timestamp())}
+      old_entity -> {old_entity, new_entity}
+    end
   end
 
   defp is_edge([%{} | _]), do: true
   defp is_edge(%{}), do: true
   defp is_edge(_), do: false
 
-  defp diff_node(old_node, new_node) do
-    Enum.reduce(new_node, {[], []}, fn {key, values}, {add, delete} ->
-      values = List.wrap(values)
-      old_values = List.wrap(old_node[key])
-      to_delete = diff_values(key, old_values, values)
-      to_add = diff_values(key, values, old_values)
-      {to_add ++ add, to_delete ++ delete}
+  defp valuefy_node(node) do
+    for {key, value} <- node, !String.contains?(key, "|"), into: %{}, do: {key, Value.new(value)}
+  end
+
+  defp valuefy_edge(node, edge_name) do
+    Enum.reduce(node, %{}, fn {key, value}, acc ->
+      case String.split(key, "|") do
+        [^edge_name, edge_attr] -> Map.put(acc, edge_attr, Value.new(value))
+        _ -> acc
+      end
     end)
   end
 
-  defp diff_values(_key, nil, _existing), do: []
-  defp diff_values(key, values, nil), do: key_diff(key, values)
+  defp partial_diff_attrs(old_attrs, new_attrs) do
+    {delete_attrs, add_attrs} = do_partial_diff(old_attrs, new_attrs)
+    {Map.new(delete_attrs), Map.new(add_attrs)}
+  end
 
-  defp diff_values(key, values, to_diff) do
+  defp do_partial_diff(old_attrs, new_attrs) do
+    Enum.reduce(new_attrs, {[], []}, fn {key, values}, {delete, add} ->
+      values = List.wrap(values)
+      old_values = List.wrap(old_attrs[key])
+      to_delete = diff_real_values(key, old_values, values)
+      to_add = diff_real_values(key, values, old_values)
+      {to_delete ++ delete, to_add ++ add}
+    end)
+  end
+
+  defp diff_real_values(key, values, to_diff) do
     to_diff = Enum.map(to_diff, &from_value(&1))
     values = Enum.filter(values, fn value -> not (from_value(value) in to_diff) end)
     key_diff(key, values)
@@ -79,55 +105,80 @@ defmodule Calypte.Changeset do
   defp key_diff(_key, []), do: []
   defp key_diff(key, values), do: [{key, unwrap(values)}]
 
-  defp add_change(_id, []), do: []
-  defp add_change(id, changes), do: %Change{id: id, values: Map.new(changes)}
+  defp edge_changes(id, edge_jsons, id_key, %Graph{edges: edges}) do
+    for {edge, jsons} <- edge_jsons,
+        %{^id_key => in_id} = json <- List.wrap(jsons) do
+      edge_id = {id, edge, in_id}
 
-  defp del_change(_id, []), do: []
-  defp del_change(id, changes), do: %Change{action: :del, id: id, values: Map.new(changes)}
-
-  defp edge_changes(id, id_key, edges) do
-    for {edge, jsons} <- edges,
-        %{^id_key => in_id} <- List.wrap(jsons),
-        do: %Change{type: :edge, id: [id, edge, in_id], values: timestamp()}
+      new_edge = valuefy_edge(json, edge)
+      {old_edge, new_edge} = fetch_or_create(edges, edge_id, new_edge)
+      {delete_attrs, add_attrs} = partial_diff_attrs(old_edge, new_edge)
+      %Change{type: :edge, id: edge_id, delete: delete_attrs, add: add_attrs}
+    end
   end
 
   @doc """
   Build changeset from binding diff
   """
-  def from_binding(%Binding{matches: old_matches, updated_matches: new_matches} = binding) do
-    to_delete = find_new(old_matches, new_matches)
-    to_add = find_new(new_matches, old_matches)
+  def from_binding(binding) do
+    %Binding{matches: old_matches, updated_matches: new_matches, types: _types} = binding
 
-    to_delete_changes =
-      for {var, attrs} <- to_delete,
-          do: %Change{action: :del, id: Binding.node_id!(binding, var), values: attrs}
+    changes =
+      for {var, {to_delete, to_add}} <- diff_matches(old_matches, new_matches) do
+        {id, types} = id_types(binding, var, to_delete, to_add)
+        %Change{id: id, delete: to_delete, add: to_add, meta: types}
+      end
 
-    to_add_changes =
-      for {var, attrs} <- to_add,
-          do: %Change{action: :add, id: Binding.node_id!(binding, var), values: attrs}
-
-    %__MODULE__{changes: to_delete_changes ++ to_add_changes}
+    %__MODULE__{changes: changes}
   end
 
-  defp find_new(matches1, matches2) do
-    Enum.reduce(matches1, %{}, fn {var, values}, acc ->
-      var_attrs2 = Map.get(matches2, var, %{})
-      Enum.reduce(values, acc, &find_new_in_attr(var, &1, var_attrs2, &2))
-    end)
+  defp id_types(%{type_key: type_key} = binding, var, to_delete, to_add) do
+    {id, types} = Binding.var_info(binding, var)
+    types = (wrap(types) -- values(to_delete, type_key)) ++ values(to_add, type_key)
+    {id, Enum.map(types, &from_value/1)}
   end
 
-  defp find_new_in_attr(var, {attr, values}, var_attrs2, acc) do
-    case values |> wrap() |> Enum.filter(&(&1.virtual != true)) do
-      [] ->
-        acc
+  defp values(map, type_key), do: map |> Map.get(type_key) |> wrap()
 
-      values ->
-        case wrap(var_attrs2[attr]) do
-          ^values -> acc
-          _ -> deep_put(acc, [var, attr], unwrap(values))
-        end
+  defp diff_matches(old_matches, new_matches) do
+    {diffs, old_matches} =
+      Enum.flat_map_reduce(new_matches, old_matches, fn {var, attrs}, old_matches ->
+        {old_attrs, old_matches} = Map.pop(old_matches, var, %{})
+        {flat_diff(var, old_attrs, attrs), old_matches}
+      end)
+
+    deletes = Enum.flat_map(old_matches, fn {var, values} -> flat_diff(var, values, %{}) end)
+    deletes ++ diffs
+  end
+
+  defp flat_diff(var, old_attrs, new_attrs) do
+    case diff_attrs(old_attrs, new_attrs) do
+      {[], []} -> []
+      {to_delete, to_add} -> [{var, {Map.new(to_delete), Map.new(to_add)}}]
     end
   end
+
+  defp diff_attrs(old_attrs, new_attrs) do
+    {delete, add, old_attrs} =
+      Enum.reduce(new_attrs, {[], [], old_attrs}, fn {attr, values}, {delete, add, old_attrs} ->
+        {old_values, old_attrs} = Map.pop(old_attrs, attr)
+        {to_delete, to_add} = diff_values(attr, old_values, values)
+        {to_delete ++ delete, to_add ++ add, old_attrs}
+      end)
+
+    to_delete =
+      Enum.flat_map(old_attrs, fn {attr, values} -> key_diff(attr, non_virtual(values)) end)
+
+    {to_delete ++ delete, add}
+  end
+
+  defp diff_values(attr, old_values, new_values) do
+    old_values = old_values |> wrap() |> non_virtual()
+    new_values = new_values |> wrap() |> non_virtual()
+    {key_diff(attr, old_values -- new_values), key_diff(attr, new_values -- old_values)}
+  end
+
+  defp non_virtual(attrs), do: Enum.filter(attrs, &(not match?(%{virtual: true}, &1)))
 
   @doc """
   Revert changeset
@@ -136,6 +187,6 @@ defmodule Calypte.Changeset do
     %{changeset | changes: Enum.reduce(changes, [], &[revert_change(&1) | &2])}
   end
 
-  defp revert_change(%Change{action: :del} = change), do: %{change | action: :add}
-  defp revert_change(%Change{action: :add} = change), do: %{change | action: :del}
+  defp revert_change(%Change{delete: delete, add: add} = change),
+    do: %{change | delete: add, add: delete}
 end

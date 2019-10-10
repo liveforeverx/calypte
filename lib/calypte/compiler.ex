@@ -9,7 +9,7 @@ defmodule Calypte.Compiler do
 
   import Utils
 
-  defstruct vars: %{}, key: nil, current_var: nil, modified_vars: %{}
+  defstruct types: %{}, vars: %{}, key: nil, current_var: nil, modified_vars: %{}
 
   @known_meta ["id", "if", "then"]
 
@@ -22,7 +22,7 @@ defmodule Calypte.Compiler do
   end
 
   defp preprocess_ast(ast) do
-    {%Rule{id: id} = rule, %__MODULE__{modified_vars: modified_vars} = _compiler} =
+    {%Rule{id: id} = rule, compiler} =
       Enum.reduce(ast, {%Rule{}, %__MODULE__{}}, fn {key, ast}, {rule, compiler} ->
         %{meta: meta} = rule
         compiler = %__MODULE__{compiler | key: key}
@@ -34,21 +34,26 @@ defmodule Calypte.Compiler do
         end
       end)
 
-    %Rule{rule | modified_vars: modified_vars, id: clean_id(id)}
+    %__MODULE__{modified_vars: modified_vars, vars: vars} = compiler
+
+    %Rule{rule | modified_vars: modified_vars, id: clean_id(id), vars: vars}
   end
 
   # save current scope
-  defp preprocess_ast(%Var{name: name, type: type} = var, %__MODULE__{} = compiler)
+  defp preprocess_ast(%Var{name: name, type: type} = var, compiler)
        when is_binary(type) do
-    {var, %{compiler | current_var: name}}
+    {var, update_vars(%{compiler | current_var: name}, var)}
   end
 
   # apply current scope to unnamed attribute
   defp preprocess_ast(%Var{name: nil} = var, %__MODULE__{current_var: current_var} = compiler) do
-    {%Var{var | name: current_var}, compiler}
+    var = %Var{var | name: current_var}
+    {var, update_vars(compiler, var)}
   end
 
-  # apply current scope to unnamed attribute
+  defp preprocess_ast(%Var{} = var, %__MODULE__{} = compiler),
+    do: {var, update_vars(compiler, var)}
+
   defp preprocess_ast(%Expr{left: var, type: :=} = ast, %__MODULE__{key: "then"} = compiler) do
     %Var{name: name, attr: attr} = var
     %{modified_vars: modified_vars} = compiler
@@ -57,6 +62,18 @@ defmodule Calypte.Compiler do
 
   defp preprocess_ast(var, compiler) do
     {var, compiler}
+  end
+
+  defp update_vars(%__MODULE__{types: types} = compiler, %Var{name: name, type: type})
+       when is_binary(type) do
+    %{compiler | types: deep_put(types, [name], type)}
+  end
+
+  defp update_vars(compiler, %Var{name: name, attr: nil} = var), do: compiler
+
+  defp update_vars(compiler, %Var{name: name, attr: attr, type: type} = var) do
+    %__MODULE__{key: key, types: types, vars: vars} = compiler
+    %{compiler | vars: deep_put(vars, [key, types[name], attr], true)}
   end
 
   defp clean_id([%Value{val: id}]), do: id

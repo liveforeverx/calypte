@@ -1,7 +1,7 @@
 Nonterminals root meta_pairs meta_pair expression expressions left_match
              type_def basic_expr assignment assertion list function arg_list var attribute math
              uminus_math data data_basic data_arg data_list value_number number boolean.
-Terminals '@' '[' ']' '(' ')' '$' '\'' '=' '-' '+' '*' '/' '%' 'true' 'false' ',' isa is func_begin op and
+Terminals '@' '[' ']' '(' ')' '$' '.' '=' '-' '+' '*' '/' '%' 'true' 'false' ',' isa is func_begin op and
           or not in default label datetime integer float string.
 Rootsymbol root.
 
@@ -70,7 +70,7 @@ uminus_math -> '-' math                                : expr('$1', '$2', 'nil')
 
 var -> '$' label                                       : var('$2', '$2', nil).
 
-attribute -> '$' label '\'' label                      : var('$2', '$2', '$4').
+attribute -> '$' label '.' label                       : var('$2', '$2', '$4').
 attribute -> label                                     : var('$1', 'nil', '$1').
 
 data -> '[' ']'                                        : [].

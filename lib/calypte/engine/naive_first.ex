@@ -25,11 +25,6 @@ defmodule Calypte.Engine.NaiveFirst do
   end
 
   @impl true
-  def eval(%{rules: rules} = state, graph) do
-    {search(rules, graph, state), state}
-  end
-
-  @impl true
   def add_exec_change(%{executed: executed} = state, {rule_id, hash}, _) do
     %{state | executed: deep_put(executed, [rule_id, hash], true)}
   end
@@ -47,35 +42,48 @@ defmodule Calypte.Engine.NaiveFirst do
   @impl true
   def add_change(state, _), do: state
 
+  @impl true
+  def eval(%{rules: rules} = state, graph) do
+    {search(rules, graph, state), state}
+  end
+
   def search([], _graph, _state), do: []
 
-  def search([%Rule{if: if_ast} = rule | rules], %{id_key: id_key} = graph, state) do
-    with [] <- find_binding(if_ast, graph, %Binding{rule: rule, id_key: id_key}, state) do
+  def search([%Rule{if: if_ast} = rule | rules], graph, state) do
+    with [] <- find_binding(if_ast, graph, Binding.init(graph, rule), state) do
       search(rules, graph, state)
     end
   end
 
-  defp find_binding([], _graph, %Binding{} = binding, state) do
+  @doc """
+  Simple find of binding using sequential unfolding of matches
+  """
+  def find_binding([], _graph, %Binding{} = binding, state) do
     binding = Binding.calc_hash(binding)
     if executed?(state, binding), do: [], else: [binding]
   end
 
-  defp find_binding([%Var{name: name, type: type} | matches], graph, binding, state)
-       when is_binary(type) do
+  def find_binding([%Var{name: name, type: type} | matches], graph, binding, state)
+      when is_binary(type) do
     candidates = Graph.get_typed(graph, type)
+    %{types: types} = binding
+    binding = %{binding | types: Map.put(types, name, type)}
     check_branches(name, candidates, matches, graph, binding, state)
   end
 
-  defp find_binding([%Relation{} = relation | matches], graph, %{nodes: nodes} = binding, state) do
+  def find_binding([%Relation{} = relation | matches], graph, binding, state) do
     %Relation{from: %Var{name: from_var}, to: %Var{name: to_var, type: type}, edge: edge} =
       relation
+
+    %{nodes: nodes, types: types} = binding
+    binding = %{binding | types: Map.put(types, to_var, type)}
 
     edges = Graph.related(graph, nodes[from_var], edge)
     candidates = Graph.get_typed(graph, type, edges)
     check_branches(to_var, candidates, matches, graph, binding, state)
   end
 
-  defp find_binding([expr | matches], graph, binding, state) do
+  def find_binding([expr | matches], graph, binding, state) do
     check_bindings(matches, graph, Rule.match(expr, binding), state)
   end
 

@@ -8,6 +8,7 @@ defmodule Calypte do
     Changeset,
     Context,
     Compiler,
+    Error,
     Engine,
     LogEntry,
     Graph,
@@ -40,8 +41,12 @@ defmodule Calypte do
   """
   def parse(str, _opts \\ []) do
     with {:ok, tokens, _} <- str |> to_charlist |> :calypte_lexer.string(),
-         {:ok, parsed} <- :calypte_parser.parse(tokens),
-         do: {:ok, parsed}
+         {:ok, parsed} <- :calypte_parser.parse(tokens) do
+      {:ok, parsed}
+    else
+      {:error, error} -> {:error, %Error{reason: error}}
+      {:error, error, _} -> {:error, %Error{reason: error}}
+    end
   end
 
   @doc """
